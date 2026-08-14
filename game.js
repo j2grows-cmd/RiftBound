@@ -7,139 +7,77 @@ const CARD_POOL = [
   { id: 'vi', name: 'Vi', type: 'CHAMPION', cost: 2, power: 4, text: 'A relentless fighter who punches through defenses.' },
   { id: 'yasuo', name: 'Yasuo', type: 'CHAMPION', cost: 3, power: 5, text: 'A skilled duelist who dominates contested ground.' },
   { id: 'ekko', name: 'Ekko', type: 'CHAMPION', cost: 2, power: 3, text: 'A time-bending skirmisher.' },
+  { id: 'spell-shield', name: 'Barrier', type: 'SPELL', cost: 1, power: 0, text: 'A prototype spell. Playing it draws a card.' },
+  { id: 'scout', name: 'Rift Scout', type: 'UNIT', cost: 1, power: 1, text: 'A cheap unit that helps contest early battlefields.' },
 ];
 
-const BATTLEFIELDS = ['Nexus Gate', 'Summoner\'s Rift', 'Shurima Crossing'];
-
+const BATTLEFIELDS = ['Nexus Gate', "Summoner's Rift", 'Shurima Crossing'];
 let state;
-
+let selectedCard = null;
 const $ = (id) => document.getElementById(id);
 
-function shuffledDeck() {
-  const deck = [];
-  for (let i = 0; i < 3; i++) deck.push(...CARD_POOL.map(card => ({ ...card })));
-  return deck.sort(() => Math.random() - 0.5);
-}
-
-function createState() {
-  const deck = shuffledDeck();
-  return {
-    turn: 1,
-    activePlayer: 'player',
-    resources: 1,
-    resourceMax: 1,
-    playerScore: 0,
-    enemyScore: 0,
-    deck,
-    hand: deck.splice(0, 5),
-    discard: [],
-    playerField: [[], [], []],
-    enemyField: [[], [], []],
-    log: [],
-    gameOver: false,
-    extraDrawUsed: false,
-  };
-}
-
-function addLog(message) {
-  state.log.push(message);
-  if (state.log.length > 30) state.log.shift();
-}
-
-function drawCard(actor = 'You') {
-  if (state.deck.length === 0) {
-    addLog('Your deck is empty.');
-    render();
-    return;
-  }
-  const card = state.deck.shift();
-  state.hand.push(card);
-  addLog(`<b>${actor}</b> drew a card.`);
+function newGame() {
+  state = RiftRules.createGame(CARD_POOL);
+  selectedCard = null;
   render();
 }
 
-function playCard(handIndex, battlefieldIndex) {
+function playSelectedCard(fieldIndex) {
+  if (selectedCard === null) return;
+  const result = RiftRules.playCard(state, 'player', selectedCard, fieldIndex);
+  if (!result.ok) {
+    addLocalLog(result.reason);
+  } else if (result.card.type === 'SPELL') {
+    RiftRules.draw(state, 'player', 1);
+    state.history.push({ turn: state.turn, actor: 'PLAYER', message: 'Barrier resolved: drew 1 card.' });
+  }
+  selectedCard = null;
+  render();
+}
+
+function addLocalLog(message) {
+  state.history.push({ turn: state.turn, actor: 'SYSTEM', message });
+}
+
+function drawExtra() {
   if (state.gameOver || state.activePlayer !== 'player') return;
-  const card = state.hand[handIndex];
-  if (!card) return;
-  if (card.cost > state.resources) {
-    addLog(`Not enough resources to play <b>${card.name}</b>.`);
+  if (!state.extraDrawUsed) {
+    state.extraDrawUsed = true;
+    RiftRules.draw(state, 'player', 1);
+    addLocalLog('You used the once-per-turn draw action.');
     render();
-    return;
   }
-
-  state.resources -= card.cost;
-  state.hand.splice(handIndex, 1);
-  state.playerField[battlefieldIndex].push(card);
-  addLog(`<b>You</b> played <b>${card.name}</b> to ${BATTLEFIELDS[battlefieldIndex]}.`);
-  calculateScores();
-  render();
 }
 
-function calculateScores() {
-  const player = state.playerField.reduce((sum, field) => sum + field.reduce((a, c) => a + c.power, 0), 0);
-  const enemy = state.enemyField.reduce((sum, field) => sum + field.reduce((a, c) => a + c.power, 0), 0);
-  state.playerScore = player;
-  state.enemyScore = enemy;
-}
+function enemyAction() {
+  if (state.gameOver || state.activePlayer !== 'enemy') return;
+  const affordable = state.hands.enemy
+    .map((card, index) => ({ card, index }))
+    .filter(x => x.card.cost <= state.resources.enemy);
 
-function opponentTurn() {
-  state.activePlayer = 'enemy';
-  addLog('<b>Opponent</b> is taking a turn.');
-
-  const affordable = CARD_POOL.filter(card => card.cost <= state.resourceMax);
-  const card = affordable[Math.floor(Math.random() * affordable.length)];
-  if (card && state.resourceMax >= card.cost) {
-    let remaining = state.resourceMax;
-    let placements = 0;
-    while (remaining >= card.cost && placements < 2 && Math.random() > 0.35) {
-      const copy = { ...card };
-      const field = Math.floor(Math.random() * 3);
-      state.enemyField[field].push(copy);
-      remaining -= copy.cost;
-      placements++;
-      addLog(`<b>Opponent</b> played <b>${copy.name}</b> to ${BATTLEFIELDS[field]}.`);
-    }
+  if (affordable.length) {
+    affordable.sort((a, b) => b.card.power - a.card.power);
+    const choice = affordable[0];
+    const fields = [0, 1, 2].sort((a, b) => RiftRules.fieldPower(state, 'player', a) - RiftRules.fieldPower(state, 'player', b));
+    const result = RiftRules.playCard(state, 'enemy', choice.index, fields[0]);
+    if (result.ok && result.card.type === 'SPELL') RiftRules.draw(state, 'enemy', 1);
   }
-
-  calculateScores();
-  if (state.enemyScore >= 8) {
-    finishGame('Opponent wins the prototype match.');
-    return;
-  }
-
-  state.turn += 1;
-  state.resourceMax = Math.min(8, state.resourceMax + 1);
-  state.resources = state.resourceMax;
-  state.activePlayer = 'player';
+  RiftRules.pass(state, 'enemy');
   state.extraDrawUsed = false;
-  drawCard('You');
-  addLog(`<b>Turn ${state.turn}</b> — your turn.`);
   render();
 }
 
 function endTurn() {
   if (state.gameOver || state.activePlayer !== 'player') return;
-  calculateScores();
-  if (state.playerScore >= 8) {
-    finishGame('You win the prototype match!');
-    return;
-  }
-  opponentTurn();
-}
-
-function finishGame(message) {
-  state.gameOver = true;
-  addLog(`<b>${message}</b>`);
-  $('turnLabel').textContent = 'Game Over';
-  $('playerStatus').textContent = message;
-  $('enemyStatus').textContent = 'Match complete';
+  RiftRules.pass(state, 'player');
   render();
+  if (!state.gameOver && state.activePlayer === 'enemy') setTimeout(enemyAction, 250);
 }
 
 function cardHTML(card, index) {
-  const disabled = state.gameOver || card.cost > state.resources || state.activePlayer !== 'player';
-  return `<button class="card ${disabled ? 'disabled' : ''}" data-card-index="${index}" ${disabled ? 'disabled' : ''}>
+  const disabled = state.gameOver || card.cost > state.resources.player || state.activePlayer !== 'player';
+  const selected = selectedCard === index;
+  return `<button class="card ${disabled ? 'disabled' : ''} ${selected ? 'selected' : ''}" data-card-index="${index}" ${disabled ? 'disabled' : ''}>
     <span class="card-cost">${card.cost}</span>
     <span class="card-type">${card.type}</span>
     <h3>${card.name}</h3>
@@ -148,59 +86,56 @@ function cardHTML(card, index) {
   </button>`;
 }
 
-function fieldHTML(fields, owner) {
-  return fields.map((field, index) => {
-    const power = field.reduce((sum, card) => sum + card.power, 0);
+function fieldHTML(player) {
+  return state.fields[player].map((field, index) => {
+    const ownPower = RiftRules.fieldPower(state, player, index);
+    const opponent = player === 'player' ? 'enemy' : 'player';
+    const opposingPower = RiftRules.fieldPower(state, opponent, index);
+    const controller = state.control[index];
     const cards = field.map(card => `<div class="mini-card"><strong>${card.name}</strong><span>${card.power} power</span></div>`).join('');
-    return `<div class="battlefield ${field.length ? '' : 'empty'}" data-field="${index}" data-owner="${owner}">
-      <div class="battlefield-name"><span>${BATTLEFIELDS[index]}</span><span class="battlefield-score">${power}</span></div>
+    const clickable = player === 'player' && selectedCard !== null && !state.gameOver;
+    return `<div class="battlefield ${field.length ? '' : 'empty'} ${clickable ? 'targetable' : ''}" data-field="${index}" data-owner="${player}">
+      <div class="battlefield-name"><span>${BATTLEFIELDS[index]}</span><span class="battlefield-score">${ownPower} vs ${opposingPower}</span></div>
+      <div class="control-badge ${controller || 'contested'}">${controller === player ? 'CONTROLLED' : controller ? 'CONTESTED BY OPPONENT' : 'CONTESTED'}</div>
       <div class="cards-on-field">${cards}</div>
     </div>`;
   }).join('');
 }
 
 function render() {
-  $('resources').textContent = state.resources;
-  $('resourceMax').textContent = state.resourceMax;
-  $('resourceFill').style.width = `${Math.max(0, Math.min(100, (state.resources / state.resourceMax) * 100))}%`;
-  $('playerScore').textContent = state.playerScore;
-  $('enemyScore').textContent = state.enemyScore;
+  $('resources').textContent = state.resources.player;
+  $('resourceMax').textContent = state.maxResources.player;
+  $('resourceFill').style.width = `${Math.max(0, Math.min(100, (state.resources.player / state.maxResources.player) * 100))}%`;
+  $('playerScore').textContent = state.score.player;
+  $('enemyScore').textContent = state.score.enemy;
   $('turnNumber').textContent = `Turn ${state.turn}`;
-  $('handCount').textContent = `${state.hand.length} card${state.hand.length === 1 ? '' : 's'}`;
-  $('playerBattlefields').innerHTML = fieldHTML(state.playerField, 'player');
-  $('opponentBattlefields').innerHTML = fieldHTML(state.enemyField, 'enemy');
-  $('hand').innerHTML = state.hand.map(cardHTML).join('');
-  $('gameLog').innerHTML = state.log.map(entry => `<div class="log-entry">${entry}</div>`).join('');
+  $('handCount').textContent = `${state.hands.player.length} cards`;
+  $('playerBattlefields').innerHTML = fieldHTML('player');
+  $('opponentBattlefields').innerHTML = fieldHTML('enemy');
+  $('hand').innerHTML = state.hands.player.map(cardHTML).join('');
+  $('gameLog').innerHTML = state.history.slice(-30).reverse().map(entry => `<div class="log-entry"><b>${entry.actor}</b> · ${entry.message}</div>`).join('');
+  $('turnLabel').textContent = state.gameOver ? 'Game Over' : state.activePlayer === 'player' ? 'Your Action' : 'Opponent Action';
+  $('playerStatus').textContent = state.gameOver ? (state.winner === 'player' ? 'Victory' : 'Defeat') : `${state.resources.player} resource${state.resources.player === 1 ? '' : 's'}`;
+  $('enemyStatus').textContent = state.gameOver ? 'Match complete' : `${state.resources.enemy} resource${state.resources.enemy === 1 ? '' : 's'}`;
   $('endTurn').disabled = state.gameOver || state.activePlayer !== 'player';
   $('drawCard').disabled = state.gameOver || state.activePlayer !== 'player' || state.extraDrawUsed;
-  $('drawCard').textContent = state.extraDrawUsed ? 'Extra Draw Used' : 'Draw Card';
-  $('turnLabel').textContent = state.gameOver ? 'Game Over' : state.activePlayer === 'player' ? 'Your Turn' : 'Opponent Turn';
+  $('drawCard').textContent = state.extraDrawUsed ? 'Draw Used' : 'Draw Card';
 
-  document.querySelectorAll('[data-card-index]').forEach(button => {
-    button.addEventListener('click', () => {
-      const handIndex = Number(button.dataset.cardIndex);
-      const battlefield = window.prompt('Choose a battlefield: 1 = Nexus Gate, 2 = Summoner\'s Rift, 3 = Shurima Crossing');
-      const index = Number(battlefield) - 1;
-      if (index >= 0 && index < 3) playCard(handIndex, index);
-    });
-  });
-}
+  document.querySelectorAll('[data-card-index]').forEach(button => button.addEventListener('click', () => {
+    selectedCard = Number(button.dataset.cardIndex);
+    render();
+  }));
+  document.querySelectorAll('[data-owner="player"][data-field]').forEach(field => field.addEventListener('click', () => playSelectedCard(Number(field.dataset.field))));
 
-function newGame() {
-  state = createState();
-  addLog('<b>New match</b> started. You have the first turn.');
-  addLog('Play a card, choose a battlefield, then end your turn.');
-  render();
+  if (state.gameOver) {
+    $('endTurn').textContent = state.winner === 'player' ? 'Victory!' : 'Defeat';
+  } else {
+    $('endTurn').textContent = selectedCard === null ? 'Pass Action' : 'Select Battlefield';
+  }
 }
 
 $('endTurn').addEventListener('click', endTurn);
-$('drawCard').addEventListener('click', () => {
-  if (state.gameOver || state.activePlayer !== 'player' || state.extraDrawUsed) return;
-  state.extraDrawUsed = true;
-  drawCard('You');
-  addLog('<b>You</b> used the once-per-turn extra draw.');
-  render();
-});
+$('drawCard').addEventListener('click', drawExtra);
 $('newGame').addEventListener('click', newGame);
 
 newGame();
