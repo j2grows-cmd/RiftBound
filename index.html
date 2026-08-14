@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090d18" />
+  <title>RiftBound — Phase 1</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">RIFTBOUND</div>
+        <h1>League of Legends Card Game</h1>
+      </div>
+      <div class="phase-pill">PHASE 1 · PLAYABLE PROTOTYPE</div>
+    </header>
+
+    <main class="game-layout">
+      <section class="game-panel">
+        <div class="status-row">
+          <div class="player-status enemy">
+            <div class="avatar">N</div>
+            <div><strong>Neutral Opponent</strong><span id="enemyStatus">Waiting</span></div>
+          </div>
+          <div class="turn-status">
+            <span id="turnLabel">Your Turn</span>
+            <strong id="turnNumber">Turn 1</strong>
+          </div>
+          <div class="player-status player">
+            <div class="avatar">J</div>
+            <div><strong>You</strong><span id="playerStatus">Ready</span></div>
+          </div>
+        </div>
+
+        <div class="board">
+          <div class="opponent-zone">
+            <div class="zone-label">OPPONENT FIELD</div>
+            <div class="battlefields" id="opponentBattlefields"></div>
+          </div>
+
+          <div class="rift-divider"><span>✦ THE RIFT ✦</span></div>
+
+          <div class="player-zone">
+            <div class="zone-label">YOUR FIELD</div>
+            <div class="battlefields" id="playerBattlefields"></div>
+          </div>
+        </div>
+
+        <div class="hand-panel">
+          <div class="hand-heading">
+            <span>YOUR HAND</span>
+            <span id="handCount">0 cards</span>
+          </div>
+          <div class="hand" id="hand"></div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="resource-card">
+          <div class="resource-title">RESOURCES</div>
+          <div class="resource-main"><span id="resources">1</span><span class="resource-max">/ <span id="resourceMax">1</span></span></div>
+          <div class="resource-bar"><span id="resourceFill"></span></div>
+          <p>Play cards by spending your available resources.</p>
+        </div>
+
+        <div class="score-card">
+          <div class="score-row"><span>Your score</span><strong id="playerScore">0</strong></div>
+          <div class="score-row"><span>Opponent</span><strong id="enemyScore">0</strong></div>
+          <div class="score-target">First to <strong>8</strong> wins the prototype match.</div>
+        </div>
+
+        <div class="controls">
+          <button class="primary" id="endTurn">End Turn</button>
+          <button class="secondary" id="drawCard">Draw Card</button>
+          <button class="secondary" id="newGame">New Game</button>
+        </div>
+
+        <div class="log-card">
+          <div class="log-title">GAME LOG</div>
+          <div id="gameLog" class="game-log"></div>
+        </div>
+
+        <div class="phase-notes">
+          <strong>Phase 1 includes</strong>
+          <ul>
+            <li>Three battlefields</li>
+            <li>Deck + opening hand</li>
+            <li>Resource progression</li>
+            <li>Playable unit cards</li>
+            <li>Battlefield scoring</li>
+            <li>Turn progression</li>
+          </ul>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>
