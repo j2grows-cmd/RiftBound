@@ -1,139 +1,24 @@
 const RiftRules = (() => {
   const MAX_RESOURCES = 8;
   const WIN_SCORE = 8;
-
-  function cloneCard(card) {
-    return { ...card, instanceId: `${card.id}-${Math.random().toString(36).slice(2, 9)}` };
-  }
-
-  function shuffle(cards, random = Math.random) {
-    const result = [...cards];
-    for (let i = result.length - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      [result[i], result[j]] = [result[j], result[i]];
-    }
-    return result;
-  }
-
-  function createDeck(cardPool, copies = 3) {
-    const cards = [];
-    for (let i = 0; i < copies; i++) cards.push(...cardPool.map(cloneCard));
-    return shuffle(cards);
-  }
-
+  function cloneCard(card) { return { ...card, instanceId: `${card.id}-${Math.random().toString(36).slice(2, 9)}` }; }
+  function shuffle(cards, random = Math.random) { const result = [...cards]; for (let i = result.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [result[i], result[j]] = [result[j], result[i]]; } return result; }
+  function createDeck(cardPool, copies = 3) { const cards = []; for (let i = 0; i < copies; i++) cards.push(...cardPool.map(cloneCard)); return shuffle(cards); }
   function createGame(cardPool) {
     const deck = createDeck(cardPool);
-    const game = {
-      version: 2,
-      turn: 1,
-      phase: 'MAIN',
-      activePlayer: 'player',
-      resources: { player: 1, enemy: 1 },
-      maxResources: { player: 1, enemy: 1 },
-      hands: { player: deck.splice(0, 5), enemy: [] },
-      decks: { player: deck, enemy: createDeck(cardPool) },
-      discard: { player: [], enemy: [] },
-      fields: { player: [[], [], []], enemy: [[], [], []] },
-      control: [null, null, null],
-      score: { player: 0, enemy: 0 },
-      passed: { player: false, enemy: false },
-      history: [],
-      gameOver: false,
-      winner: null,
-    };
-    draw(game, 'enemy', 5);
-    record(game, 'SYSTEM', 'Game created');
-    record(game, 'SYSTEM', 'Player starts with 5 cards and 1 resource.');
-    return game;
+    const game = { version: 2, turn: 1, phase: 'MAIN', activePlayer: 'player', resources: { player: 1, enemy: 1 }, maxResources: { player: 1, enemy: 1 }, hands: { player: deck.splice(0, 5), enemy: [] }, decks: { player: deck, enemy: createDeck(cardPool) }, discard: { player: [], enemy: [] }, fields: { player: [[], [], []], enemy: [[], [], []] }, control: [null, null, null], score: { player: 0, enemy: 0 }, passed: { player: false, enemy: false }, history: [], gameOver: false, winner: null };
+    draw(game, 'enemy', 5); record(game, 'SYSTEM', 'Game created'); record(game, 'SYSTEM', 'Select a card, then select a battlefield. Pass when finished.'); return game;
   }
-
-  function record(game, actor, message) {
-    game.history.push({ turn: game.turn, actor, message });
-    if (game.history.length > 100) game.history.shift();
-  }
-
-  function draw(game, player, count = 1) {
-    for (let i = 0; i < count; i++) {
-      if (!game.decks[player].length) {
-        record(game, player.toUpperCase(), 'Deck is empty.');
-        return false;
-      }
-      game.hands[player].push(game.decks[player].shift());
-    }
-    return true;
-  }
-
-  function fieldPower(game, player, index) {
-    return game.fields[player][index].reduce((sum, card) => sum + card.power, 0);
-  }
-
-  function resolveBattlefields(game) {
-    for (let i = 0; i < 3; i++) {
-      const player = fieldPower(game, 'player', i);
-      const enemy = fieldPower(game, 'enemy', i);
-      game.control[i] = player === enemy ? null : player > enemy ? 'player' : 'enemy';
-    }
-    game.score.player = game.control.filter(owner => owner === 'player').length;
-    game.score.enemy = game.control.filter(owner => owner === 'enemy').length;
-    if (game.score.player >= WIN_SCORE || game.score.enemy >= WIN_SCORE) {
-      game.gameOver = true;
-      game.winner = game.score.player >= WIN_SCORE ? 'player' : 'enemy';
-    }
-  }
-
-  function validatePlay(game, player, handIndex, fieldIndex) {
-    if (game.gameOver) return { ok: false, reason: 'Game is over.' };
-    if (game.activePlayer !== player) return { ok: false, reason: 'It is not your action window.' };
-    if (fieldIndex < 0 || fieldIndex > 2) return { ok: false, reason: 'Invalid battlefield.' };
-    const card = game.hands[player][handIndex];
-    if (!card) return { ok: false, reason: 'Card is not in hand.' };
-    if (card.cost > game.resources[player]) return { ok: false, reason: 'Not enough resources.' };
-    return { ok: true, card };
-  }
-
-  function playCard(game, player, handIndex, fieldIndex) {
-    const validation = validatePlay(game, player, handIndex, fieldIndex);
-    if (!validation.ok) return validation;
-    const card = game.hands[player].splice(handIndex, 1)[0];
-    game.resources[player] -= card.cost;
-    game.fields[player][fieldIndex].push(card);
-    record(game, player.toUpperCase(), `Played ${card.name} to battlefield ${fieldIndex + 1}.`);
-    resolveBattlefields(game);
-    return { ok: true, card };
-  }
-
-  function pass(game, player) {
-    if (game.gameOver) return { ok: false, reason: 'Game is over.' };
-    if (game.activePlayer !== player) return { ok: false, reason: 'It is not your action window.' };
-    game.passed[player] = true;
-    record(game, player.toUpperCase(), 'Passed action.');
-    if (game.passed.player && game.passed.enemy) advanceTurn(game);
-    else game.activePlayer = player === 'player' ? 'enemy' : 'player';
-    return { ok: true };
-  }
-
-  function advanceTurn(game) {
-    game.turn += 1;
-    game.phase = 'MAIN';
-    game.passed.player = false;
-    game.passed.enemy = false;
-    for (const player of ['player', 'enemy']) {
-      game.maxResources[player] = Math.min(MAX_RESOURCES, game.maxResources[player] + 1);
-      game.resources[player] = game.maxResources[player];
-      draw(game, player, 1);
-    }
-    game.activePlayer = 'player';
-    record(game, 'SYSTEM', `Turn ${game.turn} begins.`);
-    resolveBattlefields(game);
-  }
-
-  function serialize(game) {
-    return JSON.stringify(game);
-  }
-
-  function replayFrom(snapshot) {
-    return JSON.parse(snapshot);
-  }
-
+  function record(game, actor, message) { game.history.push({ turn: game.turn, actor, message }); if (game.history.length > 100) game.history.shift(); }
+  function draw(game, player, count = 1) { for (let i = 0; i < count; i++) { if (!game.decks[player].length) { record(game, player.toUpperCase(), 'Deck is empty.'); return false; } game.hands[player].push(game.decks[player].shift()); } return true; }
+  function fieldPower(game, player, index) { return game.fields[player][index].reduce((sum, card) => sum + card.power, 0); }
+  function resolveBattlefields(game) { for (let i = 0; i < 3; i++) { const player = fieldPower(game, 'player', i); const enemy = fieldPower(game, 'enemy', i); game.control[i] = player === enemy ? null : player > enemy ? 'player' : 'enemy'; } }
+  function scoreRound(game) { resolveBattlefields(game); const playerPoints = game.control.filter(owner => owner === 'player').length; const enemyPoints = game.control.filter(owner => owner === 'enemy').length; game.score.player += playerPoints; game.score.enemy += enemyPoints; if (playerPoints || enemyPoints) record(game, 'SYSTEM', `Round scoring: You +${playerPoints}, Opponent +${enemyPoints}.`); if (game.score.player >= WIN_SCORE || game.score.enemy >= WIN_SCORE) { game.gameOver = true; game.winner = game.score.player >= WIN_SCORE ? 'player' : 'enemy'; } }
+  function validatePlay(game, player, handIndex, fieldIndex) { if (game.gameOver) return { ok: false, reason: 'Game is over.' }; if (game.activePlayer !== player) return { ok: false, reason: 'It is not your action window.' }; if (fieldIndex < 0 || fieldIndex > 2) return { ok: false, reason: 'Invalid battlefield.' }; const card = game.hands[player][handIndex]; if (!card) return { ok: false, reason: 'Card is not in hand.' }; if (card.cost > game.resources[player]) return { ok: false, reason: 'Not enough resources.' }; return { ok: true, card }; }
+  function playCard(game, player, handIndex, fieldIndex) { const validation = validatePlay(game, player, handIndex, fieldIndex); if (!validation.ok) return validation; const card = game.hands[player].splice(handIndex, 1)[0]; game.resources[player] -= card.cost; game.fields[player][fieldIndex].push(card); record(game, player.toUpperCase(), `Played ${card.name} to battlefield ${fieldIndex + 1}.`); resolveBattlefields(game); return { ok: true, card }; }
+  function pass(game, player) { if (game.gameOver) return { ok: false, reason: 'Game is over.' }; if (game.activePlayer !== player) return { ok: false, reason: 'It is not your action window.' }; game.passed[player] = true; record(game, player.toUpperCase(), 'Passed action.'); if (game.passed.player && game.passed.enemy) advanceTurn(game); else game.activePlayer = player === 'player' ? 'enemy' : 'player'; return { ok: true }; }
+  function advanceTurn(game) { scoreRound(game); if (game.gameOver) return; game.turn += 1; game.phase = 'MAIN'; game.passed.player = false; game.passed.enemy = false; for (const player of ['player', 'enemy']) { game.maxResources[player] = Math.min(MAX_RESOURCES, game.maxResources[player] + 1); game.resources[player] = game.maxResources[player]; draw(game, player, 1); } game.activePlayer = 'player'; record(game, 'SYSTEM', `Turn ${game.turn} begins.`); }
+  function serialize(game) { return JSON.stringify(game); }
+  function replayFrom(snapshot) { return JSON.parse(snapshot); }
   return { MAX_RESOURCES, WIN_SCORE, createGame, draw, fieldPower, resolveBattlefields, validatePlay, playCard, pass, advanceTurn, serialize, replayFrom };
 })();
