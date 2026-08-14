@@ -1,43 +1,38 @@
 # RiftBound
 
-A browser-based Phase 1 prototype for a League of Legends / Riftbound-inspired digital card game.
+A browser-based Phase 2 prototype for a League of Legends / Riftbound-inspired digital card game.
 
-## Phase 1
+## Phase 2 — Rules Engine
 
-The first milestone is deliberately small and playable:
+The project now separates game rules from presentation through `rules.js`.
 
-- Three battlefields
-- Opening hand and shuffled deck
-- Resource progression each turn
-- Playable champion cards
-- Battlefield placement
-- Automatic power scoring
-- Basic opponent turn simulation
-- Extra draw action
-- Turn progression and win condition
-- Game log
-- New game/reset
+- Formal versioned game-state model
+- Separate player and opponent decks, hands and discard zones
+- Unique card instances
+- Validated resource spending and card placement
+- Alternating action windows
+- Pass/end-of-round handling
+- Battlefield power comparison and control
+- Cumulative victory-point scoring
+- Prototype win condition at 8 victory points
+- Serializable game state for future replays/network play
+- Basic spell resolution hook
+- More structured game history
+- Interactive card selection → battlefield targeting
 
 ## Run locally
 
-This version is intentionally dependency-free. Open `index.html` in a browser or serve the repository with any static web server.
+This version remains dependency-free. Open `index.html` in a browser or serve the repository with any static web server.
 
-## Next milestones
+## Roadmap
 
-### Phase 2 — Real game engine
-- Formal game-state model
-- Rules validation
-- Card effect system
-- Proper combat/contest rules
-- Deck construction rules
-- Deterministic replays
-
-### Phase 3 — Better UI
-- Drag-and-drop card placement
+### Phase 3 — Presentation
+- Drag-and-drop interactions
 - Card detail modal
 - Animations
 - Better battlefield representation
 - Deck builder
+- Visual card assets
 
 ### Phase 4 — Multiplayer
 - Cloudflare Workers
@@ -46,6 +41,7 @@ This version is intentionally dependency-free. Open `index.html` in a browser or
 - Matchmaking
 - Player identity
 - Reconnect support
+- Server-authoritative rules execution
 
 ### Phase 5 — Content
 - Expanded card database
@@ -53,5 +49,6 @@ This version is intentionally dependency-free. Open `index.html` in a browser or
 - Search/filtering
 - Deck import/export
 - Balance tooling
+- Automated card tests
 
 > This prototype uses text-only cards and original UI styling rather than reproducing official card artwork.
